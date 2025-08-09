@@ -18,12 +18,36 @@ We've designed our contribution workflow to be transparent and to ensure every s
     git checkout -b your-feature-name upstream/contrib
     ```
 
-3.  **Develop Your Script:** Follow the comprehensive instructions in our **[Script Management Guide](docs/public-orions-belt-script-management-guide.md)**. Pay close attention to:
-    *   **File Naming:** Use the `UNASSIGNED_descriptive_name.yml` format.
-    *   **Metadata:** Provide all required metadata fields.
+3.  **Develop Your Script:** Follow the comprehensive instructions in our **[Script Management Guide](docs/public-orions-belt-script-management-guide.md)** and **[Playbook Standards](docs/PLAYBOOK_STANDARDS.md)**. Pay close attention to:
+    *   **File Naming:** Use the `OB-[ID]_[description].yml` format (e.g., `OB-004_secure_ssh.yml`).
+    *   **Metadata:** Provide all required metadata fields as specified in the standards.
+    *   **Security:** Use `hosts: "{{ target_hosts }}"` and avoid hardcoded secrets.
     *   **Testing:** Include Molecule tests for your playbook where applicable.
 
 4.  **Submit a Pull Request:** Submit your Pull Request (PR) to our **`contrib`** branch.
+
+### Automated Quality Checks
+
+When you submit a PR, our automated workflow will run several checks to ensure your playbook meets our standards:
+
+**Basic Validation:**
+- ✅ **YAML Syntax**: Ensures your playbook has valid YAML syntax
+- ✅ **File Naming**: Verifies your playbook follows the `OB-[ID]_[description].yml` naming convention
+- ✅ **Security Standards**: Checks for proper `target_hosts` usage and no hardcoded secrets
+
+**Ansible Linting:**
+- ✅ **Code Quality**: Runs `ansible-lint` to check for best practices and potential issues
+- ✅ **Standards Compliance**: Ensures your playbook follows Ansible and project standards
+
+**What Happens If Checks Fail:**
+- The PR will be blocked from merging until all issues are resolved
+- You'll receive clear error messages explaining what needs to be fixed
+- You can push additional commits to fix issues and re-trigger the checks
+
+**Getting Help:**
+- Review the [Playbook Standards](docs/PLAYBOOK_STANDARDS.md) for detailed requirements
+- Check the [Template Examples](templates/) for working examples
+- Open an issue if you need help understanding or fixing any checks
 
 ### The Review and Integration Process
 

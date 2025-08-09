@@ -1,0 +1,17 @@
+---
+# Example Role - Variables
+# 
+# These are role-specific variables that are not meant to be overridden.
+# For sensitive data, use vault.yml instead.
+
+# Service configuration defaults
+service_config_template: "service.conf.j2"
+service_unit_template: "{{ service_name }}.service.j2"
+
+# Logging configuration
+log_level: "INFO"
+log_format: "json"
+
+# Security settings
+max_connections: 1000
+timeout: 30
