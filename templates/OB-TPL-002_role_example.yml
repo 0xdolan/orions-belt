@@ -1,0 +1,86 @@
+---
+# OB-TPL-002 | Role Example Playbook
+# 
+# This playbook demonstrates how to use Ansible roles with Orion's Belt standards.
+# It calls the example_role which shows proper role structure and vault usage.
+#
+# Usage:
+#   Standalone: ansible-playbook -i inventory OB-TPL-002_role_example.yml -e "target_hosts=web_servers"
+#   ob.sh: ./ob.sh OB-TPL-002_role_example.yml web_servers
+#   Forge: Select this playbook and target hosts via UI
+#
+# Attribution: See PLAYBOOK_STANDARDS.md Section 3.3 for attribution requirements
+
+# orion_metadata:
+#   name: "OB-TPL-002 | Role Example Playbook"
+#   description: "Demonstrates role-based playbook standards with vault integration"
+#   version: "1.0.0"
+#   author: "Orion's Belt Team"
+#   created: "2025-01-09"
+#   tags:
+#     - "example"
+#     - "template"
+#     - "role"
+#     - "vault"
+#   compliance_mapping:
+#     - "control:example-control-002"
+#   execution_modes:
+#     - "standalone"
+#     - "ob.sh"
+#     - "forge"
+#   dependencies: []
+#   variables:
+#     required:
+#       - "target_hosts"
+#     optional:
+#       - "orion_service_name"
+#       - "orion_service_port"
+#       - "orion_vault_password"
+
+- name: Role Example Playbook
+  hosts: "{{ target_hosts }}"
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    # Default values for optional variables
+    orion_service_name: "{{ orion_service_name | default('example-service') }}"
+    orion_service_port: "{{ orion_service_port | default(8080) }}"
+  
+  pre_tasks:
+    - name: Validate target_hosts is provided
+      fail:
+        msg: |
+          CRITICAL SECURITY ERROR: target_hosts variable is not set!
+          
+          This playbook requires explicit host targeting for security.
+          
+          Usage examples:
+          - Standalone: ansible-playbook -i inventory OB-TPL-002_role_example.yml -e "target_hosts=web_servers"
+          - ob.sh: ./ob.sh OB-TPL-002_role_example.yml web_servers
+          - Forge: Select this playbook and target hosts via UI
+      when: target_hosts is not defined or target_hosts == ""
+    
+    - name: Validate required variables
+      assert:
+        that:
+          - orion_service_name is defined
+          - orion_service_port is defined
+        fail_msg: "Required variables orion_service_name and orion_service_port must be defined"
+  
+  roles:
+    - name: example_role
+      vars:
+        # Pass variables to the role
+        service_name: "{{ orion_service_name }}"
+        service_port: "{{ orion_service_port }}"
+  
+  post_tasks:
+    - name: Display role execution summary
+      ansible.builtin.debug:
+        msg: |
+          Role example completed successfully:
+          - Target hosts: {{ target_hosts }}
+          - Service name: {{ orion_service_name }}
+          - Service port: {{ orion_service_port }}
+          - Role: example_role
