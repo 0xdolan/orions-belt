@@ -37,3 +37,17 @@ ansible_user: youruser_name
 ansible_password: "your_password"
 ansible_become_password: "your_password"
 add_to_root: "true"
+
+active_directory:
+  domain: "corp.example.com"
+  computer_ou: "OU=LinuxServers,OU=Assets,OU=RootOU"
+  admin_user: "Administrator"
+  admin_password: "SomePassword123$"
+
+# Optional defaults for SSSD access controls
+# These feed ad_access_group/ad_access_users in the playbook
+ad_access_group_var: "Domain Admins"
+ad_access_users_var: ""  # e.g., "alice,bob"
+
+# Optional: used by security validation step to test disabled-user blocking
+disabled_test_user: ""  # e.g., "disabled.user"

@@ -25,27 +25,93 @@
 - name: Join Linux to Active Directory (AD)
   hosts: "{{ target_hosts }}"
   become: true
-  vars_files:
-    - ../../../config.yml
-    - "{{ lookup('first_found', find_env_config, errors='ignore') }}"
   vars:
-    find_env_config:
-      files:
-        - ../../../config-{{ environment }}.yml
-      skip: true
-    # Map variables from config files to playbook variables
-    ad_domain: "{{ active_directory.domain }}"
-    ad_realm: "{{ active_directory.domain | upper }}"
-    ad_computer_ou: "{{ active_directory.computer_ou }}"
-    ad_user: "{{ active_directory.admin_user }}"
+    # Resolve AD variables from inventory/group_vars (including vault) safely
+    ad_domain: "{{ (active_directory | default({})).domain | default('') }}"
+    ad_computer_ou: "{{ (active_directory | default({})).computer_ou | default('') }}"
+    ad_user: "{{ (active_directory | default({})).admin_user | default('') }}"
+    ad_realm: "{{ ad_domain | upper }}"
+    # Ensure we use UPN for Kerberos/realm operations
+    ad_user_upn: "{{ ad_user if ('@' in ad_user) else (ad_user ~ '@' ~ ad_realm) }}"
+    # Compute full DN for computer OU. If DC components are missing, append from ad_domain
+    ad_computer_ou_dn: "{{ ad_computer_ou if ('DC=' in ad_computer_ou) else (ad_computer_ou ~ ',' ~ (ad_domain.split('.') | map('regex_replace','^(.*)$','DC=\\1') | join(','))) }}"
     # These can be overridden in inventory or via command line if needed
     ad_access_group: "{{ ad_access_group_var | default('Domain Admins') }}"
     ad_access_users: "{{ ad_access_users_var | default('') }}"
 
-  vars_prompt:
-    - name: "bind_password"
-      prompt: "Enter bind password for {{ ad_user }}"
-      private: yes
+  pre_tasks:
+    - name: Show resolved AD join parameters (sanitized)
+      debug:
+        msg:
+          - "AD Domain: {{ ad_domain }}"
+          - "AD Realm: {{ ad_realm }}"
+          - "AD User: {{ ad_user }}"
+          - "Computer OU (input): {{ ad_computer_ou }}"
+          - "Computer OU (DN used): {{ ad_computer_ou_dn }}"
+      when: ansible_verbosity|int > 0
+
+    - name: DNS | Verify domain resolves
+      command: getent hosts {{ ad_domain }}
+      register: dns_check
+      changed_when: false
+      failed_when: false
+
+    - name: DNS | Verify Kerberos SRV record
+      command: host -t SRV _kerberos._tcp.{{ ad_domain }}
+      register: srv_check
+      changed_when: false
+      failed_when: false
+
+    - name: Realmd | Discover domain
+      command: realm discover {{ ad_domain }}
+      register: realm_discover
+      changed_when: false
+      failed_when: false
+
+    - name: Discovery diagnostics (only on failure later)
+      set_fact:
+        ad_discovery_diag:
+          dns_hosts: "{{ dns_check.stdout | default('') }}"
+          dns_srv: "{{ srv_check.stdout | default('') }}"
+          realm_discover: "{{ realm_discover.stdout | default('') }}"
+      when: dns_check is defined and srv_check is defined and realm_discover is defined
+    - name: Set bind_password from inventory/vault if available
+      set_fact:
+        bind_password: "{{ (active_directory | default({})).admin_password }}"
+      when: bind_password is not defined and ((active_directory | default({})).admin_password | default('')) != ''
+      no_log: true
+
+    - name: Prompt for bind password (fallback if not provided anywhere)
+      pause:
+        prompt: "Enter bind password for {{ ad_user }}"
+        echo: no
+      register: bind_pw_prompt
+      when: bind_password is not defined and ((active_directory | default({})).admin_password | default('')) == ''
+
+    - name: Capture prompted bind password
+      set_fact:
+        bind_password: "{{ bind_pw_prompt.user_input }}"
+      when: bind_password is not defined and bind_pw_prompt is defined and (bind_pw_prompt.user_input | default('')) != ''
+      no_log: true
+    - name: Validate target_hosts is provided
+      fail:
+        msg: |
+          CRITICAL SECURITY ERROR: target_hosts variable is not set!
+          This playbook requires explicit specification of target hosts to prevent
+          accidental execution on unintended systems.
+          Usage: ansible-playbook playbook.yml --extra-vars "target_hosts=your_hosts"
+      when: target_hosts is not defined or target_hosts == ""
+    - name: Validate required Active Directory variables are provided
+      fail:
+        msg: |
+          Required Active Directory variables are missing.
+          Define them in inventory/group_vars (e.g., group_vars/all/main.yml and vault.yml):
+            active_directory.domain
+            active_directory.computer_ou
+            active_directory.admin_user
+          Or pass equivalents via -e.
+      when: ad_domain == '' or ad_computer_ou == '' or ad_user == ''
+
   tasks:
     - name: Install required packages on Debian-based systems
       apt:
@@ -170,10 +236,32 @@
       changed_when: false
       failed_when: false # Command returns non-zero if not joined, which is OK.
 
+    - name: Kerberos preflight | Acquire TGT to verify credentials
+      shell: |
+        set -o pipefail
+        echo "{{ bind_password }}" | kinit {{ ad_user_upn }}
+      args:
+        executable: /bin/bash
+      register: kinit_result
+      no_log: true
+      changed_when: false
+      failed_when: false
+      when: "ad_domain not in realm_list_output.stdout"
+
+    - name: Fail if Kerberos preflight failed
+      fail:
+        msg: |
+          Kerberos authentication failed for user '{{ ad_user_upn }}' in realm '{{ ad_realm }}'.
+          Please verify the password, time synchronization, and network connectivity to KDCs.
+          Hint: Check 'klist' and system clock skew (ntp/chrony).
+      when: (ad_domain not in realm_list_output.stdout) and (kinit_result.rc is defined and kinit_result.rc != 0)
+
     - name: Join system to the domain if not already joined
-      command: /bin/bash -c "echo {{ bind_password }} | realm join --user={{ ad_user }} {{ ad_domain }} --computer-ou='{{ ad_computer_ou }}'"
+      command: /bin/bash -c "echo {{ bind_password }} | realm join --user={{ ad_user_upn }} {{ ad_domain }} --computer-ou='{{ ad_computer_ou_dn }}'"
       register: join_output
       no_log: True
+      failed_when: false
+      changed_when: false
       when: "ad_domain not in realm_list_output.stdout"
 
     - name: Display join result
@@ -188,20 +276,25 @@
         msg: |
           Failed to join the domain '{{ ad_domain }}'.
           Please check credentials and connectivity.
-          Error from realm command: {{ join_output.stderr | default('No stderr output') }}
-      when: join_output.changed and join_output.rc != 0
+          Diagnostics:
+            - join rc: {{ join_output.rc | default('unknown') }}
+            - realm stderr (may be redacted): {{ join_output.stderr | default('No stderr output') }}
+            - DNS hosts: {{ ad_discovery_diag.dns_hosts | default('n/a') }}
+            - DNS SRV: {{ ad_discovery_diag.dns_srv | default('n/a') }}
+            - realm discover: {{ (ad_discovery_diag.realm_discover | regex_replace('\\n',' ')) | default('n/a') }}
+      when: join_output.rc != 0
 
     - name: Ensure SSSD service is restarted after domain join
       service:
         name: sssd
         state: restarted
-      when: join_output.changed # Only restart if join was successful
+      when: join_output.rc == 0 # Only restart if join was successful
       ignore_errors: yes # Allow restart to fail initially
 
     - name: Wait for SSSD to fully start after domain join
       wait_for:
         timeout: 15
-      when: join_output.changed
+      when: join_output.rc == 0
 
     - name: Update SSSD configuration with full domain settings after successful join
       copy:

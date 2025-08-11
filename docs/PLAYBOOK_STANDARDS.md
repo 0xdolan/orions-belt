@@ -364,7 +364,46 @@ ansible-playbook OB-004_secure_ssh.yml \
 
 ## Variable Management Standards
 
-### 6.1 Variable Precedence Hierarchy
+### 6.1 Inventory-First Variable Management (Updated)
+
+We now exclusively use Ansible inventory for variable management. The legacy environment config files (e.g., `config.yml`, `config-{{ environment }}.yml`) are deprecated and must not be referenced in new or updated playbooks.
+
+Approved sources:
+
+- `inventory/group_vars/**` (environment/global defaults)
+- `inventory/host_vars/**` (host-specific overrides)
+- `inventory/group_vars/all/vault.yml` (encrypted secrets)
+
+Pattern for safe resolution and validation:
+
+```yaml
+vars:
+  # Resolve from inventory with safe defaults
+  ad_domain: "{{ (active_directory | default({})).domain | default('') }}"
+  ad_computer_ou: "{{ (active_directory | default({})).computer_ou | default('') }}"
+  ad_user: "{{ (active_directory | default({})).admin_user | default('') }}"
+  ad_realm: "{{ ad_domain | upper }}"
+
+pre_tasks:
+  - name: "Validate | Target Hosts | are specified"
+    ansible.builtin.fail:
+      msg: |
+        CRITICAL SECURITY ERROR: target_hosts variable is not set!
+    when: target_hosts is not defined or target_hosts == ""
+
+  - name: "Validate | Active Directory Vars | are provided"
+    ansible.builtin.fail:
+      msg: |
+        Required Active Directory variables are missing. Define in inventory group_vars/host_vars.
+    when: ad_domain == '' or ad_computer_ou == '' or ad_user == ''
+```
+
+Deprecated:
+
+- `vars_files:` includes pointing to `config.yml` or `config-{{ environment }}.yml`
+- Environment-based external config resolution for core playbook variables
+
+### 6.2 Variable Precedence Hierarchy
 
 **Orion's Belt Variable Resolution Order** (highest to lowest priority):
 
