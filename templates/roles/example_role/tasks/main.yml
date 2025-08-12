@@ -1,0 +1,130 @@
+---
+# Example Role - Main Tasks
+# 
+# This role demonstrates proper role structure and standards compliance.
+# It shows vault usage, handlers, and proper error handling.
+
+- name: Include vault variables
+  ansible.builtin.include_vars: vault.yml
+  when: vault_vars is defined
+
+- name: Validate role variables
+  ansible.builtin.assert:
+    that:
+      - service_name is defined
+      - service_port is defined
+    fail_msg: "Required role variables service_name and service_port must be defined"
+
+- name: Create service configuration
+  block:
+    - name: Create service directory
+      ansible.builtin.file:
+        path: "/etc/{{ service_name }}"
+        state: directory
+        mode: "0755"
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_user_gid }}"
+      register: dir_result
+    
+    - name: Create service configuration file
+      ansible.builtin.template:
+        src: "service.conf.j2"
+        dest: "/etc/{{ service_name }}/config.conf"
+        mode: "0644"
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_user_gid }}"
+        backup: yes
+        validate: "test -f %s"
+      register: config_result
+      notify: restart service
+    
+    - name: Create service user
+      ansible.builtin.user:
+        name: "{{ service_name }}"
+        system: yes
+        shell: "/bin/false"
+        home: "/var/lib/{{ service_name }}"
+        create_home: yes
+      register: user_result
+    
+    - name: Create service data directory
+      ansible.builtin.file:
+        path: "/var/lib/{{ service_name }}"
+        state: directory
+        mode: "0755"
+        owner: "{{ service_name }}"
+        group: "{{ service_name }}"
+      when: user_result.changed
+  
+  rescue:
+    - name: Log configuration error
+      ansible.builtin.debug:
+        msg: |
+          Error occurred during service configuration:
+          - Task: {{ ansible_failed_task.name }}
+          - Error: {{ ansible_failed_result.msg }}
+          - Service: {{ service_name }}
+    
+    - name: Cleanup failed configuration
+      ansible.builtin.file:
+        path: "/etc/{{ service_name }}"
+        state: absent
+      when: dir_result is defined and dir_result.changed
+    
+    - name: Fail with error message
+      ansible.builtin.fail:
+        msg: "Failed to configure service {{ service_name }}. Check logs for details."
+  
+  always:
+    - name: Log configuration summary
+      ansible.builtin.debug:
+        msg: |
+          Service configuration completed:
+          - Service: {{ service_name }}
+          - Port: {{ service_port }}
+          - Config file: /etc/{{ service_name }}/config.conf
+          - User: {{ service_name }}
+          - Success: {{ config_result is defined and not config_result.failed }}
+
+- name: Start and enable service
+  block:
+    - name: Start service
+      ansible.builtin.systemd:
+        name: "{{ service_name }}"
+        state: started
+        enabled: yes
+        daemon_reload: yes
+      register: service_result
+    
+    - name: Verify service is running
+      ansible.builtin.systemd:
+        name: "{{ service_name }}"
+      register: service_status
+    
+    - name: Display service status
+      ansible.builtin.debug:
+        msg: |
+          Service status:
+          - Name: {{ service_name }}
+          - State: {{ service_status.status.ActiveState }}
+          - Enabled: {{ service_status.status.UnitFileState }}
+          - PID: {{ service_status.status.MainPID }}
+  
+  rescue:
+    - name: Log service error
+      ansible.builtin.debug:
+        msg: |
+          Error occurred during service management:
+          - Task: {{ ansible_failed_task.name }}
+          - Error: {{ ansible_failed_result.msg }}
+          - Service: {{ service_name }}
+    
+    - name: Attempt service restart
+      ansible.builtin.systemd:
+        name: "{{ service_name }}"
+        state: restarted
+      when: service_result is defined and service_result.failed
+    
+    - name: Fail with service error
+      ansible.builtin.fail:
+        msg: "Failed to manage service {{ service_name }}. Check systemd logs for details."

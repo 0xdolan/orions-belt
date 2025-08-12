@@ -1,0 +1,142 @@
+---
+# OB-TPL-001 | Simple Example Playbook
+# 
+# This playbook demonstrates the basic standards for Orion's Belt playbooks.
+# It shows correct metadata, host targeting, variable usage, and error handling.
+#
+# Usage:
+#   Standalone: ansible-playbook -i inventory OB-TPL-001_simple_example.yml -e "target_hosts=web_servers"
+#   ob.sh: ./ob.sh OB-TPL-001_simple_example.yml web_servers
+#   Forge: Select this playbook and target hosts via UI
+#
+# Attribution: See PLAYBOOK_STANDARDS.md Section 3.3 for attribution requirements
+
+# orion_metadata:
+#   name: "OB-TPL-001 | Simple Example Playbook"
+#   description: "Demonstrates basic playbook standards with file management and error handling"
+#   version: "1.0.0"
+#   author: "Orion's Belt Team"
+#   created: "2025-01-09"
+#   tags:
+#     - "example"
+#     - "template"
+#     - "file-management"
+#   compliance_mapping:
+#     - "control:example-control-001"
+#   execution_modes:
+#     - "standalone"
+#     - "ob.sh"
+#     - "forge"
+#   dependencies: []
+#   variables:
+#     required:
+#       - "target_hosts"
+#     optional:
+#       - "orion_file_path"
+#       - "orion_file_content"
+#       - "orion_backup_enabled"
+
+- name: Simple Example Playbook
+  hosts: "{{ target_hosts }}"
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    # Default values for optional variables
+    orion_file_path: "{{ orion_file_path | default('/tmp/example_file.txt') }}"
+    orion_file_content: "{{ orion_file_content | default('Hello from Orion''s Belt!') }}"
+    orion_backup_enabled: "{{ orion_backup_enabled | default(true) }}"
+  
+  pre_tasks:
+    - name: Validate target_hosts is provided
+      fail:
+        msg: |
+          CRITICAL SECURITY ERROR: target_hosts variable is not set!
+          
+          This playbook requires explicit host targeting for security.
+          
+          Usage examples:
+          - Standalone: ansible-playbook -i inventory OB-TPL-001_simple_example.yml -e "target_hosts=web_servers"
+          - ob.sh: ./ob.sh OB-TPL-001_simple_example.yml web_servers
+          - Forge: Select this playbook and target hosts via UI
+      when: target_hosts is not defined or target_hosts == ""
+    
+    - name: Validate required variables
+      assert:
+        that:
+          - orion_file_path is defined
+          - orion_file_content is defined
+        fail_msg: "Required variables orion_file_path and orion_file_content must be defined"
+  
+  tasks:
+    - name: Create example file with content
+      block:
+        - name: Create directory structure
+          ansible.builtin.file:
+            path: "{{ orion_file_path | dirname }}"
+            state: directory
+            mode: "0755"
+            owner: "{{ ansible_user_id }}"
+            group: "{{ ansible_user_gid }}"
+          register: dir_result
+        
+        - name: Write content to file
+          ansible.builtin.copy:
+            content: "{{ orion_file_content }}"
+            dest: "{{ orion_file_path }}"
+            mode: "0644"
+            owner: "{{ ansible_user_id }}"
+            group: "{{ ansible_user_gid }}"
+            backup: "{{ orion_backup_enabled }}"
+          register: file_result
+          changed_when: file_result.changed
+          failed_when: false
+        
+        - name: Verify file was created successfully
+          ansible.builtin.stat:
+            path: "{{ orion_file_path }}"
+          register: file_stat
+          
+        - name: Display file information
+          ansible.builtin.debug:
+            msg: |
+              File created successfully:
+              - Path: {{ orion_file_path }}
+              - Size: {{ file_stat.stat.size }} bytes
+              - Owner: {{ file_stat.stat.pw_name }}
+              - Permissions: {{ file_stat.stat.mode }}
+              - Backup created: {{ file_result.backup_file is defined }}
+      
+      rescue:
+        - name: Log error details
+          ansible.builtin.debug:
+            msg: |
+              Error occurred during file creation:
+              - Task: {{ ansible_failed_task.name }}
+              - Error: {{ ansible_failed_result.msg }}
+              - File path: {{ orion_file_path }}
+          
+        - name: Cleanup partial changes
+          ansible.builtin.file:
+            path: "{{ orion_file_path }}"
+            state: absent
+          when: file_result is defined and file_result.failed
+          
+        - name: Fail with error message
+          ansible.builtin.fail:
+            msg: "Failed to create file {{ orion_file_path }}. Check logs for details."
+      
+      always:
+        - name: Log execution summary
+          ansible.builtin.debug:
+            msg: |
+              Execution completed:
+              - Target hosts: {{ target_hosts }}
+              - File path: {{ orion_file_path }}
+              - Success: {{ file_result is defined and not file_result.failed }}
+              - Backup created: {{ file_result.backup_file is defined if file_result is defined else false }}
+  
+  post_tasks:
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg: "Simple example playbook completed successfully on {{ inventory_hostname }}"

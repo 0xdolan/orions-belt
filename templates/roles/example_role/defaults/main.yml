@@ -1,0 +1,26 @@
+---
+# Example Role - Default Variables
+# 
+# These are the default values for role variables.
+# They can be overridden by playbook variables or host/group vars.
+
+# Service configuration
+service_name: "example-service"
+service_port: 8080
+
+# Service user configuration
+service_user: "{{ service_name }}"
+service_group: "{{ service_name }}"
+
+# Directory paths
+service_config_dir: "/etc/{{ service_name }}"
+service_data_dir: "/var/lib/{{ service_name }}"
+service_log_dir: "/var/log/{{ service_name }}"
+
+# File permissions
+service_config_mode: "0644"
+service_dir_mode: "0755"
+service_log_mode: "0644"
+
+# Vault integration
+vault_vars: false

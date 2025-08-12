@@ -1,0 +1,15 @@
+---
+- name: Check mode test
+  hosts: all
+  gather_facts: true
+  vars:
+    # Test variables for the playbook
+    target_hosts: all
+    orion_file_path: /tmp/molecule_check_test.txt
+    orion_file_content: "This would be created in check mode"
+    orion_backup_enabled: true
+  tasks:
+    - name: Include the playbook in check mode
+      ansible.builtin.import_playbook: ../../OB-TPL-001_simple_example.yml
+      vars:
+        ansible_check_mode: true

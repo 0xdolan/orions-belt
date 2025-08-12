@@ -1,0 +1,17 @@
+---
+# Example Role - Handlers
+# 
+# This file contains handlers that can be notified by tasks in the role.
+
+- name: restart service
+  ansible.builtin.systemd:
+    name: "{{ service_name }}"
+    state: restarted
+    daemon_reload: yes
+  listen: "restart {{ service_name }}"
+
+- name: reload service
+  ansible.builtin.systemd:
+    name: "{{ service_name }}"
+    state: reloaded
+  listen: "reload {{ service_name }}"

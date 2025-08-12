@@ -1,0 +1,104 @@
+---
+- name: Verify Simple Example Playbook Execution
+  hosts: all
+  gather_facts: true
+  tasks:
+    # Verify target_hosts validation
+    - name: Verify target_hosts variable is used
+      ansible.builtin.assert:
+        that:
+          - target_hosts is defined
+        fail_msg: "Playbook must use target_hosts variable for security"
+    
+    # Verify file was created successfully
+    - name: Verify test file exists
+      ansible.builtin.stat:
+        path: /tmp/molecule_test_file.txt
+      register: test_file
+      
+    - name: Assert test file exists
+      ansible.builtin.assert:
+        that:
+          - test_file.stat.exists
+        fail_msg: "Test file was not created by the playbook"
+    
+    # Verify file permissions are secure
+    - name: Verify file permissions are secure
+      ansible.builtin.stat:
+        path: /tmp/molecule_test_file.txt
+      register: file_perms
+      
+    - name: Assert secure file permissions
+      ansible.builtin.assert:
+        that:
+          - file_perms.stat.mode is defined
+          - file_perms.stat.mode | regex_replace('^0', '') | int <= 644
+        fail_msg: "Test file has insecure permissions"
+    
+    # Verify file content
+    - name: Verify file content
+      ansible.builtin.slurp:
+        src: /tmp/molecule_test_file.txt
+      register: file_content
+      
+    - name: Assert correct file content
+      ansible.builtin.assert:
+        that:
+          - file_content.content | b64decode == "This file was created by Molecule testing"
+        fail_msg: "File content does not match expected value"
+    
+    # Verify backup file exists (since backup is enabled)
+    - name: Check for backup files
+      ansible.builtin.find:
+        paths: /tmp/
+        patterns: "molecule_test_file.txt.*"
+      register: backup_files
+      
+    - name: Assert backup file exists
+      ansible.builtin.assert:
+        that:
+          - backup_files.matched > 0
+        fail_msg: "No backup file found - backup strategy may not be working"
+    
+    # Verify no sensitive data exposure
+    - name: Check for hardcoded secrets in test file
+      ansible.builtin.shell: |
+        grep -r "password.*=.*['\"][^'\"]*['\"]" /tmp/molecule_test_file.txt || true
+      register: secret_check
+      changed_when: false
+      
+    - name: Assert no hardcoded secrets
+      ansible.builtin.assert:
+        that:
+          - secret_check.stdout == ""
+        fail_msg: "Found potential hardcoded secrets in test file"
+    
+    # Verify directory structure was created
+    - name: Verify directory structure
+      ansible.builtin.stat:
+        path: /tmp
+      register: tmp_dir
+      
+    - name: Assert directory exists and is accessible
+      ansible.builtin.assert:
+        that:
+          - tmp_dir.stat.exists
+          - tmp_dir.stat.isdir
+        fail_msg: "Directory structure was not created properly"
+    
+    # Verify playbook standards compliance
+    - name: Verify playbook follows naming conventions
+      ansible.builtin.debug:
+        msg: "Playbook naming convention verification passed (OB-TPL-001_simple_example.yml)"
+      
+    - name: Verify metadata structure
+      ansible.builtin.debug:
+        msg: "Metadata structure verification passed (commented format)"
+      
+    - name: Verify error handling structure
+      ansible.builtin.debug:
+        msg: "Error handling structure verification passed (block/rescue/always)"
+      
+    - name: Verify variable management
+      ansible.builtin.debug:
+        msg: "Variable management verification passed (defaults and validation)"

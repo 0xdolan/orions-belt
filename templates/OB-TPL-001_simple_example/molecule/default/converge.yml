@@ -1,0 +1,13 @@
+---
+- name: Converge - Execute Simple Example Playbook
+  hosts: all
+  gather_facts: true
+  vars:
+    # Test variables for the playbook
+    target_hosts: all
+    orion_file_path: /tmp/molecule_test_file.txt
+    orion_file_content: "This file was created by Molecule testing"
+    orion_backup_enabled: true
+  tasks:
+    - name: Include the simple example playbook
+      ansible.builtin.import_playbook: ../../OB-TPL-001_simple_example.yml

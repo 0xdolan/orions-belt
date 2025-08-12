@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Copyright (c) 2023 - present Expiscor Group Inc.
+# Copyright (c) 2025 - present Incudo Labs Inc.
 #
 # This file is part of Orion's Belt Project (https://github.com/IncudoLABS/orions-belt).
 #
@@ -731,7 +731,7 @@ handle_utilities() {
     echo -e "${GREEN}=== Utilities & Diagnostics ===${NC}"
     echo ""
     echo -e "${YELLOW}Available Categories:${NC}"
-    echo "1. Connectivity Tests"
+    echo "1. Connectivity"
     echo "2. System Diagnostics"
     echo "3. Verification Tools"
     echo "4. Back to Main Menu"
@@ -748,9 +748,9 @@ handle_utilities() {
     esac
 }
 
-# Function to handle Connectivity Tests
+# Function to handle Connectivity
 handle_connectivity_tests() {
-    echo -e "${CYAN}=== Connectivity Tests ===${NC}"
+    echo -e "${CYAN}=== Connectivity ===${NC}"
     select_playbook_and_run "playbooks/utilities/connectivity"
 }
 

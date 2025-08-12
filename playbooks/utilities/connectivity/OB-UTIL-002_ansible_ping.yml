@@ -29,12 +29,14 @@
 #
 # Title: Ansible Ping Test
 #
-# ID: OB-UTIL-001
+# ID: OB-UTIL-002
 #
 # Description: This utility playbook performs an Ansible ping test to verify connectivity
 #              and SSH access to target hosts. It uses the 'ping' module which is a
 #              lightweight test that returns 'pong' on success, confirming that the
 #              target host is reachable and Ansible can establish SSH connections.
+#              NOTE: This playbook requires SSH keys to be distributed first using
+#              OB-UTIL-001_distribute_ssh_keys.yml.
 #
 # Author: IncudoLABS
 #
